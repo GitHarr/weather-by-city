@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "WeatherByCity.FunctionApp": {
+      "commandName": "Project",
+      "commandLineArgs": "--port 7263",
+      "launchBrowser": false
+    }
+  }
+}
