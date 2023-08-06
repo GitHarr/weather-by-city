@@ -12,9 +12,9 @@ namespace WeatherByCity.FunctionApp.Services
 {
     public class ReadFromResponseQueueService : IReadFromResponseQueueService
     {
-        private readonly ILogger<ReadFromQueueService> logger;
+        private readonly ILogger<ReadFromResponseQueueService> logger;
 
-        public ReadFromResponseQueueService(ILogger<ReadFromQueueService> logger)
+        public ReadFromResponseQueueService(ILogger<ReadFromResponseQueueService> logger)
         {
             this.logger = logger;
         }
@@ -23,14 +23,21 @@ namespace WeatherByCity.FunctionApp.Services
         {
             this.logger.LogInformation($"C# ServiceBus response queue trigger function processed message: {message}");
 
-            var weatherData = JsonConvert.DeserializeObject<WeatherDataModel>(message);
-            if (!string.IsNullOrWhiteSpace(weatherData.Error))
+            try
             {
-                this.logger.LogError("Response queue received failure message:" + Environment.NewLine + message);
+                var weatherData = JsonConvert.DeserializeObject<WeatherDataModel>(message);
+                if (!string.IsNullOrWhiteSpace(weatherData.Error))
+                {
+                    this.logger.LogError("Response queue received failure message:" + Environment.NewLine + message);
+                }
+                else
+                {
+                    this.logger.LogInformation("Response queue received success message:" + Environment.NewLine + message);
+                }
             }
-            else
+            catch (Exception ex)
             {
-                this.logger.LogInformation("Response queue received success message:" + Environment.NewLine + message);
+                this.logger.LogError(ex.ToString());
             }
         }
     }
