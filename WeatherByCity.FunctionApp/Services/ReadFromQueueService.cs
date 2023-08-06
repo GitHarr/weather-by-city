@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
+using System.Net.Http.Json;
 using System.Text;
 using System.Threading.Tasks;
 using WeatherByCity.FunctionApp.Models;
@@ -39,38 +40,44 @@ namespace WeatherByCity.FunctionApp.Services
             var weatherData = new WeatherDataModel();
             try
             {
-                ValidateMessage(message, weatherData);
-                // if weatherData.Error -> send failure message here
-                await CallWeatherApi(message, weatherData);
-                await SendWeatherDataToPostmanEcho(weatherData.WeatherResponseContent);
-                await SendResultMessageToResponseQueue(weatherData);
+                weatherData.ValidationResult = ValidateMessage(message, weatherData);
+
+                if (string.IsNullOrWhiteSpace(weatherData.Error))
+                {
+                    await CallWeatherApi(message, weatherData);
+                    await SendWeatherDataToPostmanEcho(weatherData.WeatherResponseContent); 
+                }
             }
             catch (Exception ex)
             {
-                this.logger.LogError(ex.Message, ex);
+                this.logger.LogError(ex.ToString());
                 weatherData.Error = ex.Message + Environment.NewLine + $"{ex}";
+            }
+            finally
+            {
                 await SendResultMessageToResponseQueue(weatherData);
             }
         }
 
-        private void ValidateMessage(string message, WeatherDataModel weatherData)
+        private string ValidateMessage(string message, WeatherDataModel weatherData)
         {
             if (string.IsNullOrWhiteSpace(message))
             {
                 weatherData.Error = "The message is empty.";
+                return "Failed.";
             }
-            // ? the following will check if the string is alphanumeric as per the requirements but city names shouldn't have digits
-            if (message.Any(c => !char.IsLetterOrDigit(c)))
-            {
-                weatherData.Error = "The message contains invalid characters.";
-            }
-
-            if (message.Count() > 100)
+            else if (message.Count() > 100)
             {
                 weatherData.Error = "The message exceeds allowed number of characters.";
+                return "Failed.";
+            }
+            else if (message.Any(c => !char.IsLetterOrDigit(c)))
+            {
+                weatherData.Error = "The message contains invalid characters.";
+                return "Failed.";
             }
 
-            weatherData.ValidationResult = "Success.";
+            return "Passed.";
         }
 
         private async Task CallWeatherApi(string message, WeatherDataModel weatherData)
@@ -86,28 +93,20 @@ namespace WeatherByCity.FunctionApp.Services
             };
 
             HttpResponseMessage weatherResponse = await this.httpClient.SendAsync(request);
+            // According to the requirements, we should not proceed if response is not successful and we should send and error message.
             weatherResponse.EnsureSuccessStatusCode();
-            weatherData.StatusCode = weatherResponse.StatusCode;
-            weatherData.WeatherResponseContent = weatherResponse.Content;
-            //using (weatherResponse = await this.httpClient.SendAsync(request))
-            //{
-            //    weatherResponse.EnsureSuccessStatusCode();
-            //    weatherData.StatusCode = weatherResponse.StatusCode;
-            //    weatherData.WeatherResponseContent = weatherResponse.Content;
-            //}
+            weatherData.WeatherResponseStatusCode = weatherResponse.StatusCode;
+            weatherData.WeatherResponseContent = await weatherResponse.Content.ReadAsStringAsync();
         }
 
-        private async Task SendWeatherDataToPostmanEcho(HttpContent content)
+        private async Task SendWeatherDataToPostmanEcho(string content)
         {
-            var contentAsString = await content.ReadAsStringAsync();
-            if (!string.IsNullOrWhiteSpace(contentAsString))
+            if (!string.IsNullOrWhiteSpace(content))
             {
-                logger.LogInformation(contentAsString);
-                using (var postmanResponse = await httpClient.PostAsync("https://postman-echo.com/post", content))
-                {
-                    postmanResponse.EnsureSuccessStatusCode();
-                }
-                logger.LogInformation("Sending weather API response to Postman Echo.");
+                logger.LogInformation(content);
+                var postmanResponse = await httpClient.PostAsJsonAsync("https://postman-echo.com/post", content);
+                postmanResponse.EnsureSuccessStatusCode();
+                logger.LogInformation("Weather API response was sent to Postman Echo.");
             }
         }
 

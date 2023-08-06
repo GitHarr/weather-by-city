@@ -1,9 +1,11 @@
 ﻿using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using WeatherByCity.FunctionApp.Models;
 using WeatherByCity.FunctionApp.Services.Contracts;
 
 namespace WeatherByCity.FunctionApp.Services
@@ -20,6 +22,16 @@ namespace WeatherByCity.FunctionApp.Services
         public void Handle(string message)
         {
             this.logger.LogInformation($"C# ServiceBus response queue trigger function processed message: {message}");
+
+            var weatherData = JsonConvert.DeserializeObject<WeatherDataModel>(message);
+            if (!string.IsNullOrWhiteSpace(weatherData.Error))
+            {
+                this.logger.LogError("Response queue received failure message:" + Environment.NewLine + message);
+            }
+            else
+            {
+                this.logger.LogInformation("Response queue received success message:" + Environment.NewLine + message);
+            }
         }
     }
 }
